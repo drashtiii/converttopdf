@@ -4,7 +4,6 @@ import pandas as pd
 from fpdf.table import Table
 from fpdf.enums import Corner, XPos, YPos
 from datetime import datetime
-import re
 
 class PDF(FPDF):
     def header(self):
@@ -31,51 +30,18 @@ class PDF(FPDF):
         self.set_text_color(0, 0, 0)
         self.font_size = 8
         self.set_font("Helvetica", size=8)
-        with self.table(col_widths=col_widths, line_height=self.font_size, padding=2.5,text_align=(("LEFT",) + ("CENTER",) * 12)) as table:
+        with self.table(col_widths=col_widths, line_height=self.font_size, padding=2.5,text_align=("LEFT", "CENTER", "CENTER", "CENTER", "CENTER", "CENTER")) as table:
             for row in rows:
                 table.row(row)
 
     def create_pdf_table(file_path, output_pdf_path, date):
         df = pd.read_csv(file_path)
+        df['#Q20 Bases'] = [f"{float(i.split('(')[1].split(')')[0].replace('%','')):.2f}%" for i in df["#Q20 Bases"]]
+        df['#Q30 Bases'] = [f"{float(i.split('(')[1].split(')')[0].replace('%','')):.2f}%" for i in df["#Q30 Bases"]]
+        df = df[['Sample Id', '#Reads', 'Read Mean Length', '#Q20 Bases', '#Q30 Bases', str('%GC')]] 
+        df = df.sort_values(by='Sample Id').reset_index(drop=True)
 
-        # Step 1: Detect R1 or R2 from Sample Id
-        df["Read_Type"] = df["Sample Id"].apply(lambda x: "R1" if "_R1" in x else "R2")
-
-        # Step 2: Clean Sample Id
-        df["Sample Id"] = df["Sample Id"].apply(lambda x: re.split(r'_R[12]', x)[0])
-
-        # Step 3: Extract percentages from '#Q20 Bases' and '#Q30 Bases'
-        df['#Q20 Bases %'] = df["#Q20 Bases"].apply(lambda x: float(re.search(r"\((.*?)%\)", x).group(1)))
-        df['#Q30 Bases %'] = df["#Q30 Bases"].apply(lambda x: float(re.search(r"\((.*?)%\)", x).group(1)))
-
-        # Step 4: Keep only needed columns
-        df = df[['Sample Id', 'Read_Type', '#Reads', 'Read Mean Length', '#Q20 Bases %', '#Q30 Bases %', '%GC']]
-
-        # Step 5: Pivot into R1 and R2 columns
-        df_pivot = df.pivot(index="Sample Id", columns="Read_Type")
-
-        # Step 6: Flatten column MultiIndex to simple column names like '#Reads (R1)', etc.
-        df_pivot.columns = [f"{col[0]} ({col[1]})" for col in df_pivot.columns]
-
-        # Step 7: Reset index to make 'Sample Id' a column again
-        df_final = df_pivot.reset_index()
-
-        # Step 8: Sort by Sample Id
-        df_final = df_final.sort_values(by="Sample Id")
-
-        # Step 9: Reorder columns (optional, if you want to be explicit)
-        expected_cols = [
-        'Sample Id',
-        '#Reads (R1)', '#Reads (R2)',
-        'Read Mean Length (R1)', 'Read Mean Length (R2)',
-        '#Q20 Bases % (R1)', '#Q20 Bases % (R2)',
-        '#Q30 Bases % (R1)', '#Q30 Bases % (R2)',
-        '%GC (R1)', '%GC (R2)'
-        ]
-        df_final = df_final[expected_cols]
-
-        col_widths = [40, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 30]
-
+        col_widths = [80, 20, 20, 20, 20, 20]
         pdf = PDF()
         pdf.add_page()
         pdf.set_margins(left=12, top=44, right=12)
@@ -130,6 +96,6 @@ if __name__ == "__main__":
     file_path = args.input
     date = args.date if args.date else datetime.today().strftime("%d-%m-%Y")
 
-    output_pdf_path = "hi.pdf"
+    output_pdf_path = "RawReadTable.pdf"
 
     PDF.create_pdf_table(file_path, output_pdf_path, date)
